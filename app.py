@@ -1,6 +1,7 @@
 from flask import Flask, render_template, json, request,redirect,session,jsonify
 from flask.ext.mysql import MySQL
-from werkzeug import check_password_hash
+from threading import Thread
+import rfid_db_server
 
 mysql = MySQL()
 app = Flask(__name__)
@@ -8,19 +9,26 @@ app.secret_key = 'why would I tell you my secret key?'
 
 # MySQL configurations
 app.config['MYSQL_DATABASE_USER'] = 'root'
-app.config['MYSQL_DATABASE_PASSWORD'] = 'admin'
+app.config['MYSQL_DATABASE_PASSWORD'] = 'toor'
 app.config['MYSQL_DATABASE_DB'] = 'rfid'
 app.config['MYSQL_DATABASE_HOST'] = 'localhost'
 mysql.init_app(app)
 
+def database_contains(uid):
+    conn = mysql.connect()
+    cursor = conn.cursor()
+    cursor.execute('select * from rfid.users where user_card_uid = "{}"'.format(uid))
+    result = cursor.fetchall()
+    conn.close()
+    return len(result) > 0
 
 @app.route('/')
 def main():
-    return render_template('index.html')
+    return redirect('showSignin')
 
-@app.route('/showAddWish')
-def showAddWish():
-    return render_template('addWish.html')
+@app.route('/showAddCard')
+def showAddCard():
+    return render_template('addCard.html')
 
 @app.route('/showSignin')
 def showSignin():
@@ -42,16 +50,16 @@ def logout():
     session.pop('user',None)
     return redirect('/')
 
-@app.route('/deleteWish',methods=['POST'])
-def deleteWish():
+@app.route('/deleteCard',methods=['POST'])
+def deleteCard():
     try:
         if session.get('user'):
-            _id = request.form['id']
-            _user = session.get('user')
+            id = request.form['id']
 
             conn = mysql.connect()
             cursor = conn.cursor()
-            cursor.callproc('sp_deleteWish',(_id,_user))
+            cursor.execute("DELETE FROM rfid.users WHERE user_id = {}"
+                           .format(id))
             result = cursor.fetchall()
 
             if len(result) is 0:
@@ -68,8 +76,8 @@ def deleteWish():
         conn.close()
 
 
-@app.route('/getWishById',methods=['POST'])
-def getWishById():
+@app.route('/getCardById',methods=['POST'])
+def getCardById():
     try:
         if session.get('user'):
             
@@ -78,55 +86,57 @@ def getWishById():
     
             conn = mysql.connect()
             cursor = conn.cursor()
-            cursor.callproc('sp_GetWishById',(_id,_user))
+            cursor.callproc('sp_GetCardById',(_id,_user))
             result = cursor.fetchall()
 
-            wish = []
-            wish.append({'Id':result[0][0],'Title':result[0][1],'Description':result[0][2]})
+            Card = []
+            Card.append({'Id':result[0][0],'Title':result[0][1],'Description':result[0][2]})
 
-            return json.dumps(wish)
+            return json.dumps(Card)
         else:
             return render_template('error.html', error = 'Unauthorized Access')
     except Exception as e:
         return render_template('error.html',error = str(e))
 
-@app.route('/getWish')
-def getWish():
+@app.route('/getCard')
+def getCard():
     try:
         if session.get('user'):
-            _user = session.get('user')
-
             con = mysql.connect()
             cursor = con.cursor()
-            cursor.callproc('sp_GetWishByUser',(_user,))
-            wishes = cursor.fetchall()
+            cursor.execute('SELECT * FROM rfid.users')
+            Cardes = cursor.fetchall()
 
-            wishes_dict = []
-            for wish in wishes:
-                wish_dict = {
-                        'Id': wish[0],
-                        'Title': wish[1],
-                        'Description': wish[2],
-                        'Date': wish[4]}
-                wishes_dict.append(wish_dict)
+            Cards_dict = []
+            for Card in Cardes:
+                Card_dict = {
+                        'Id': Card[0],
+                        'Name': Card[1],
+                        'Surname': Card[2],
+                        'UID': Card[3],
+                        'Date': Card[4]}
+                Cards_dict.append(Card_dict)
 
-            return json.dumps(wishes_dict)
+            return json.dumps(Cards_dict)
         else:
             return render_template('error.html', error = 'Unauthorized Access')
     except Exception as e:
         return render_template('error.html', error = str(e))
 
-@app.route('/addWish',methods=['POST'])
-def addWish():
+@app.route('/addCard',methods=['POST'])
+def addCard():
     try:
         if session.get('user'):
-            _title = request.form['inputTitle']
-            _description = request.form['inputDescription']
-            _user = session.get('user')
+            userName = request.form['name']
+            userSurname = request.form['surname']
+            cardUID = request.form['cardUID']
 
             conn = mysql.connect()
             cursor = conn.cursor()
-            cursor.callproc('sp_addWish',(_title,_description,_user))
+            # cursor.callproc('sp_addCard',(_title,_description,_user))
+            cursor.execute(
+                "INSERT INTO `rfid`.`users` (`user_name`, `user_surname`, `user_card_uid`) VALUES ('{}', '{}', '{}')"
+                    .format(userName, userSurname, cardUID))
             data = cursor.fetchall()
 
             if len(data) is 0:
@@ -143,65 +153,20 @@ def addWish():
         cursor.close()
         conn.close()
 
-@app.route('/updateWish', methods=['POST'])
-def updateWish():
-    try:
-        if session.get('user'):
-            _user = session.get('user')
-            _title = request.form['title']
-            _description = request.form['description']
-            _wish_id = request.form['id']
-
-            
-
-            conn = mysql.connect()
-            cursor = conn.cursor()
-            cursor.callproc('sp_updateWish',(_title,_description,_wish_id,_user))
-            data = cursor.fetchall()
-
-            if len(data) is 0:
-                conn.commit()
-                return json.dumps({'status':'OK'})
-            else:
-                return json.dumps({'status':'ERROR'})
-    except Exception as e:
-        return json.dumps({'status':'Unauthorized access'})
-    finally:
-        cursor.close()
-        conn.close()
-
 
 @app.route('/validateLogin',methods=['POST'])
 def validateLogin():
-    try:
-        _username = request.form['inputEmail']
-        _password = request.form['inputPassword']
-        
-        # connect to mysql
+        _username = request.form['login']
+        _password = request.form['password']
 
-        con = mysql.connect()
-        cursor = con.cursor()
-        cursor.callproc('sp_validateLogin',(_username,))
-        data = cursor.fetchall()
-
-        
-
-
-        if len(data) > 0:
-            if check_password_hash(str(data[0][3]),_password):
-                session['user'] = data[0][0]
-                return redirect('/userHome')
-            else:
-                return render_template('error.html',error = 'Wrong Email address or Password.')
+        if _username == 'admin' and _password == 'toor':
+            session['user'] = _username
+            return redirect('/userHome')
         else:
-            return render_template('error.html',error = 'Wrong Email address or Password.')
-            
+            return render_template('error.html', error='Wrong Email address or Password.')
 
-    except Exception as e:
-        return render_template('error.html',error = str(e))
-    finally:
-        cursor.close()
-        con.close()
 
 if __name__ == "__main__":
-    app.run(port=5002)
+    Thread(target=rfid_db_server.start, daemon=True).start()
+    app.run(port=5000)
+

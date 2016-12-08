@@ -18,7 +18,7 @@
 		GetWishes();
 		$('#btnUpdate').click(function(){
 			$.ajax({
-			url : '/updateWish',
+			url : '/updateCard',
 			data : {title:$('#editTitle').val(),description:$('#editDescription').val(),id:localStorage.getItem('editId')},
 			type : 'POST',
 			success: function(res){
@@ -27,9 +27,6 @@
 			$('#editModal').modal('hide');
 							    
 				GetWishes();
-				
-				
-
 				
 			},
 			error: function(error){
@@ -41,7 +38,7 @@
 
 	function GetWishes(){
 		$.ajax({
-			url : '/getWish',
+			url : '/getCard',
 			type : 'GET',
 			success: function(res){
 				
@@ -65,7 +62,7 @@
 
 	function Delete(){
 		$.ajax({
-			url : '/deleteWish',
+			url : '/deleteCard',
 			data : {id:localStorage.getItem('deleteId')},
 			type : 'POST',
 			success: function(res){
@@ -87,7 +84,7 @@
 	function Edit(elm){
 		localStorage.setItem('editId',$(elm).attr('data-id'));
 		$.ajax({
-			url : '/getWishById',
+			url : '/getCardById',
 			data : {id:$(elm).attr('data-id')},
 			type : 'POST',
 			success: function(res){
@@ -129,7 +126,7 @@
       <div class="header">
         <nav>
           <ul class="nav nav-pills pull-right">
-	    <li role="presentation"><a href="/showAddWish">Add User</a></li>
+	    <li role="presentation"><a href="/showAddCard">Add Card owner</a></li>
             <li role="presentation" class="active"><a href="/logout">Logout</a></li>
           </ul>
         </nav>
@@ -141,11 +138,19 @@
        <li class="list-group-item">
                             <div class="checkbox">
                                 <label>
-                                    ${Title}
+                                    ${Id}
+                                </label>
+                                <label>
+                                    ${Name}
+                                </label>
+                                <label>
+                                    ${Surname}
+                                </label>
+                                <label>
+                                    ${UID}
                                 </label>
                             </div>
                             <div class="pull-right action-buttons">
-                                <a data-id=${Id} onclick="Edit(this)" ><span class="glyphicon glyphicon-pencil"></span></a>
                                <a data-id=${Id} onclick="ConfirmDelete(this)" ><span class="glyphicon glyphicon-trash"></span></a>
                             </div>
                         </li>
